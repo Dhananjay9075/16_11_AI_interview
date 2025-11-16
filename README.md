@@ -229,40 +229,6 @@ source venv/bin/activate
 ```bash
 pip install -r requirements.txt
 ```
-Django>=4.2.0,<5.0.0
-djangorestframework>=3.14.0
-django-cors-headers>=4.0.0
-channels>=4.0.0
-channels-redis>=4.1.0
-
-# AI and ML
-google-generativeai>=0.3.0
-openai-whisper>=20231117
-google-cloud-texttospeech>=2.14.0
-numpy>=1.24.0
-torch>=2.0.0
-ultralytics>=8.0.0
-opencv-python>=4.8.0
-faiss-cpu>=1.7.4
-sentence-transformers>=2.2.0
-
-# Document processing
-PyPDF2>=3.0.0
-python-docx>=1.0.0
-weasyprint>=59.0
-
-# Utilities
-python-dotenv>=1.0.0
-pytz>=2023.3
-textblob>=0.17.1
-psutil>=5.9.0
-readtime>=1.1.0
-requests>=2.31.0
-
-
-
-
-
 
 **Note:** If you encounter dependency conflicts, try:
 ```bash
