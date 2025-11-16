@@ -310,5 +310,8 @@ There are multiple ways to start an interview session:
 7. **Evaluation**: AI evaluates responses and generates feedback
 8. **Report Generation**: Comprehensive PDF report is generated
 
+** @2025 Dhananjay Paturkar. All rights reserved.**
 
+This repository and its contents are the intellectual property of the author.
+Unauthorized copying, distribution, modification, or use of any part of this project is strictly prohibited without explicit permission.
 
