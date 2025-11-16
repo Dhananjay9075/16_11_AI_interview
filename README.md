@@ -69,43 +69,6 @@ An intelligent interview platform with AI-powered question generation, real-time
     └──────────────────┘  └─────────────┘  └─────────────┘
 ```
 
-### Component Breakdown
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    FRONTEND LAYER                                │
-├─────────────────────────────────────────────────────────────────┤
-│ • Interview Portal (HTML/JS)                                     │
-│ • Real-time Video/Audio Capture                                  │
-│ • WebSocket Connection for Live Updates                          │
-└─────────────────────────────────────────────────────────────────┘
-                            ↕ HTTP/WS
-┌─────────────────────────────────────────────────────────────────┐
-│                    BACKEND LAYER                                │
-├─────────────────────────────────────────────────────────────────┤
-│  ┌──────────────────┐  ┌──────────────────┐  ┌────────────────┐│
-│  │  Request Handler│  │  Business Logic  │  │  Data Access   ││
-│  │  (Views.py)     │→ │  (AI Chatbot)   │→ │  (Models.py)   ││
-│  └──────────────────┘  └──────────────────┘  └────────────────┘│
-└─────────────────────────────────────────────────────────────────┘
-                            ↕
-┌─────────────────────────────────────────────────────────────────┐
-│                    EXTERNAL SERVICES                             │
-├─────────────────────────────────────────────────────────────────┤
-│ • Google Gemini AI    → Question Generation & Evaluation         │
-│ • Google Cloud TTS    → Text-to-Speech Conversion               │
-│ • OpenAI Whisper      → Audio Transcription                     │
-│ • Deepgram            → Real-time Speech Recognition            │
-│ • YOLO (Ultralytics)  → Face Detection & Proctoring            │
-└─────────────────────────────────────────────────────────────────┘
-                            ↕
-┌─────────────────────────────────────────────────────────────────┐
-│                    DATA LAYER                                    │
-├─────────────────────────────────────────────────────────────────┤
-│ • SQLite Database     → Session & Interview Data                │
-│ • Media Storage       → ID Cards, Snapshots, Audio Files         │
-└─────────────────────────────────────────────────────────────────┘
-```
 
 ## Interview Flow Diagram
 
