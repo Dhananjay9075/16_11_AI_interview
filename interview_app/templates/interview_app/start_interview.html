@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Start Interview - Talaro</title>
+    {% load static %}
+    <style>
+        :root { 
+            --primary-color: #667eea; 
+            --primary-dark: #5a6fd8;
+            --success-color: #28a745; 
+            --danger-color: #dc3545; 
+            --text-primary: #2c3e50;
+            --text-secondary: #6c757d;
+            --bg-primary: #f8f9fa;
+            --bg-secondary: #ffffff;
+            --border-color: #e9ecef;
+            --shadow: 0 4px 20px rgba(0,0,0,0.1);
+            --shadow-hover: 0 8px 30px rgba(0,0,0,0.15);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            line-height: 1.6; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: var(--text-primary);
+        }
+        
+        .container {
+            width: 100%;
+            max-width: 600px;
+        }
+        
+        .card { 
+            background: var(--bg-secondary); 
+            padding: 2.5rem; 
+            border-radius: 20px; 
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border-color);
+            transition: all 0.3s ease;
+        }
+        
+        .card:hover {
+            box-shadow: var(--shadow-hover);
+        }
+        
+        h1 { 
+            color: var(--text-primary); 
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            font-size: 2rem;
+            text-align: center;
+            background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+            font-size: 1rem;
+        }
+        
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-primary);
+            font-weight: 500;
+            font-size: 0.95rem;
+        }
+        
+        .required {
+            color: var(--danger-color);
+        }
+        
+        input[type="text"],
+        textarea {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            font-size: 1rem;
+            font-family: inherit;
+            transition: all 0.3s ease;
+            background: var(--bg-primary);
+        }
+        
+        input[type="text"]:focus,
+        textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            background: var(--bg-secondary);
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+        
+        .error-message {
+            background: #fee;
+            color: var(--danger-color);
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+            border-left: 4px solid var(--danger-color);
+            font-size: 0.9rem;
+        }
+        
+        .start-btn {
+            width: 100%;
+            padding: 16px 32px;
+            background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+            margin-top: 1rem;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .start-btn::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.3);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+        
+        .start-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        .start-btn:hover:not(:disabled)::before {
+            width: 300px;
+            height: 300px;
+        }
+        
+        .start-btn:active:not(:disabled) {
+            transform: translateY(0);
+        }
+        
+        .start-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+        
+        .start-btn span {
+            position: relative;
+            z-index: 1;
+        }
+        
+        .info-box {
+            background: #e7f3ff;
+            border-left: 4px solid var(--primary-color);
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+            font-size: 0.9rem;
+            color: var(--text-primary);
+        }
+        
+        .info-box strong {
+            color: var(--primary-color);
+        }
+        
+        @media (max-width: 768px) {
+            .card {
+                padding: 1.5rem;
+            }
+            
+            h1 {
+                font-size: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <h1>🎤 Start Interview</h1>
+            <p class="subtitle">Enter candidate details to begin the interview</p>
+            
+            {% if error %}
+            <div class="error-message">
+                <strong>Error:</strong> {{ error }}
+            </div>
+            {% endif %}
+            
+            <div class="info-box">
+                <strong>ℹ️ Note:</strong> After clicking Start, you'll be asked to grant camera and microphone permissions to begin the interview.
+            </div>
+            
+            <form method="POST" id="interview-form">
+                {% csrf_token %}
+                
+                <div class="form-group">
+                    <label for="candidate_name">
+                        Name of Candidate <span class="required">*</span>
+                    </label>
+                    <input 
+                        type="text" 
+                        id="candidate_name" 
+                        name="candidate_name" 
+                        placeholder="Enter candidate's full name"
+                        value="{{ candidate_name|default:'' }}"
+                        required
+                        autocomplete="name"
+                    >
+                </div>
+                
+                <div class="form-group">
+                    <label for="job_description">
+                        Job Description <span class="required">*</span>
+                    </label>
+                    <textarea 
+                        id="job_description" 
+                        name="job_description" 
+                        placeholder="Enter the job description, role, and requirements..."
+                        required
+                    >{{ job_description|default:'' }}</textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label for="candidate_email">
+                        Email (Optional)
+                    </label>
+                    <input 
+                        type="text" 
+                        id="candidate_email" 
+                        name="candidate_email" 
+                        placeholder="candidate@example.com"
+                        value="{{ candidate_email|default:'' }}"
+                        autocomplete="email"
+                    >
+                </div>
+                
+                <div class="form-group">
+                    <label for="resume_text">
+                        Resume Text (Optional)
+                    </label>
+                    <textarea 
+                        id="resume_text" 
+                        name="resume_text" 
+                        placeholder="Paste candidate's resume text here..."
+                    >{{ resume_text|default:'' }}</textarea>
+                </div>
+                
+                <button type="submit" class="start-btn" id="start-btn">
+                    <span>🚀 Start Interview</span>
+                </button>
+            </form>
+        </div>
+    </div>
+    
+    <script>
+        const form = document.getElementById('interview-form');
+        const startBtn = document.getElementById('start-btn');
+        
+        form.addEventListener('submit', function(e) {
+            const candidateName = document.getElementById('candidate_name').value.trim();
+            const jobDescription = document.getElementById('job_description').value.trim();
+            
+            if (!candidateName || !jobDescription) {
+                e.preventDefault();
+                alert('Please fill in all required fields (Name and Job Description)');
+                return false;
+            }
+            
+            // Disable button and show loading state
+            startBtn.disabled = true;
+            startBtn.innerHTML = '<span>⏳ Starting Interview...</span>';
+            
+            // Form will submit and redirect to portal
+            // Portal will handle permission requests
+            return true;
+        });
+        
+        // Auto-focus first input
+        document.getElementById('candidate_name').focus();
+    </script>
+</body>
+</html>
+

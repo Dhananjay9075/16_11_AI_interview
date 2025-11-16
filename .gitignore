@@ -1,0 +1,74 @@
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Google Cloud credentials
+ringed-reach-*.json
+*ringed-reach*.json
+*.json
+!package.json
+!package-lock.json
+
+# YOLO model files
+*.pt
+yolov8n.pt
+**/yolov8n.pt
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+ENV/
+env/
+.venv
+
+# Django
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+/media
+/staticfiles
+*.pot
+*.pyc
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Media files (user uploads)
+media/id_cards/*
+media/proctoring_snaps/*
+media/tts/*
+!media/.gitkeep
+
+# Temporary files
+*.tmp
+*.bak
+*.cache
+

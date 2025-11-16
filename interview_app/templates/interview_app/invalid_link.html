@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% if page_title %}{{ page_title }}{% else %}Interview Link{% endif %}</title>
+    <style>
+        :root { 
+            --primary-color: #667eea; 
+            --primary-dark: #5a6fd8;
+            --success-color: #28a745; 
+            --danger-color: #dc3545; 
+            --warning-color: #ffc107;
+            --text-primary: #2c3e50;
+            --text-secondary: #6c757d;
+            --bg-primary: #f8f9fa;
+            --bg-secondary: #ffffff;
+            --border-color: #e9ecef;
+            --shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            line-height: 1.6; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .container { 
+            max-width: 600px; 
+            margin: 0 auto; 
+            padding: 20px;
+        }
+        
+        .card { 
+            background: var(--bg-secondary); 
+            padding: 3rem; 
+            border-radius: 20px; 
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border-color);
+            text-align: center;
+        }
+        
+        h1 { 
+            color: var(--primary-color); 
+            margin-bottom: 1.5rem;
+            font-size: 2.5rem;
+            font-weight: 600;
+        }
+        
+        .countdown-container {
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            border-radius: 15px;
+            padding: 2rem;
+            margin: 2rem 0;
+            border-left: 5px solid var(--primary-color);
+        }
+        
+        .countdown-timer {
+            font-size: 3rem;
+            font-weight: bold;
+            color: var(--primary-color);
+            margin: 1rem 0;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .scheduled-time {
+            font-size: 1.2rem;
+            color: var(--text-secondary);
+            margin: 1rem 0;
+            padding: 1rem;
+            background: var(--bg-primary);
+            border-radius: 10px;
+        }
+        
+        .message {
+            font-size: 1.1rem;
+            color: var(--text-primary);
+            margin: 1.5rem 0;
+            line-height: 1.8;
+        }
+        
+        .warning {
+            background: linear-gradient(135deg, var(--warning-color), #e0a800);
+            color: white;
+            padding: 1rem;
+            border-radius: 10px;
+            margin: 1rem 0;
+            font-weight: 600;
+        }
+        
+        .error {
+            background: linear-gradient(135deg, var(--danger-color), #c82333);
+            color: white;
+            padding: 1rem;
+            border-radius: 10px;
+            margin: 1rem 0;
+            font-weight: 600;
+        }
+        
+        .success {
+            background: linear-gradient(135deg, var(--success-color), #20c997);
+            color: white;
+            padding: 1rem;
+            border-radius: 10px;
+            margin: 1rem 0;
+            font-weight: 600;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 12px 24px;
+            border-radius: 12px;
+            text-align: center;
+            cursor: pointer;
+            border: none;
+            font-size: 1rem;
+            font-weight: 600;
+            text-decoration: none;
+            margin: 1rem 0.5rem;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+            color: white;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.2);
+        }
+        
+        .auto-refresh {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            margin-top: 2rem;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            {% if page_title == 'Interview Not Started' %}
+                <h1>⏰ Interview Not Started</h1>
+                <div class="countdown-container">
+                    <p class="message">{{ error }}</p>
+                    <div class="scheduled-time">
+                        <strong>Scheduled Time:</strong><br>
+                        {{ scheduled_time_str }}
+                    </div>
+                    <div class="countdown-timer" id="countdown">--:--:--</div>
+                    <p class="message">Please wait until the scheduled time to begin your interview.</p>
+                </div>
+                <div class="warning">
+                    ⚠️ Do not refresh this page. It will automatically redirect you when the interview starts.
+                </div>
+                <div class="auto-refresh">
+                    This page will automatically refresh every 30 seconds to check if the interview has started.
+                </div>
+                
+                <script>
+                    // Countdown timer
+                    const startTime = new Date('{{ start_time_iso }}');
+                    const countdownEl = document.getElementById('countdown');
+                    
+                    function updateCountdown() {
+                        const now = new Date();
+                        const diff = startTime - now;
+                        
+                        if (diff <= 0) {
+                            // Interview time has arrived, redirect
+                            window.location.reload();
+                            return;
+                        }
+                        
+                        const hours = Math.floor(diff / (1000 * 60 * 60));
+                        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+                        
+                        countdownEl.textContent = 
+                            `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                    }
+                    
+                    // Update countdown every second
+                    updateCountdown();
+                    setInterval(updateCountdown, 1000);
+                    
+                    // Auto-refresh every 30 seconds to check if interview started
+                    setInterval(() => {
+                        window.location.reload();
+                    }, 30000);
+                </script>
+                
+            {% elif page_title == 'Interview Link Expired' %}
+                <h1>⏰ Interview Link Expired</h1>
+                <div class="error">
+                    {{ error }}
+                </div>
+                <p class="message">Please contact your recruiter for a new interview link.</p>
+                
+            {% else %}
+                <h1>❌ Invalid Interview Link</h1>
+                <div class="error">
+                    {{ error|default:"This interview link is invalid or has expired." }}
+                </div>
+                <p class="message">Please check your link or contact your recruiter.</p>
+            {% endif %}
+            
+            <a href="/" class="btn btn-primary">Return to Home</a>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset='utf-8'>
+<meta name='viewport' content='width=device-width,initial-scale=1'>
+<title>AI Interview Bot</title>
+<style>
+body{font-family:'Segoe UI',Tahoma,Arial;margin:0;padding:16px;background:#f5f5f5;} 
+.container{background:#fff;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.08);padding:20px;max-width:800px;margin:0 auto;}
+.status{padding:15px;border-radius:8px;background:#e7f3ff;color:#0c5460;margin:15px 0;text-align:center;font-weight:600;}
+.question{font-size:18px;font-weight:600;margin:20px 0;padding:15px;background:#f8f9fa;border-radius:8px;border-left:4px solid #007bff;}
+.transcript{background:#f8f9fa;padding:15px;border-radius:8px;margin:15px 0;border-left:3px solid #28a745;min-height:60px;}
+.progress{width:100%;height:20px;background:#e9ecef;border-radius:10px;overflow:hidden;margin:15px 0;}
+.progress-fill{height:100%;background:#007bff;transition:width 0.3s ease;}
+.mic-status{display:inline-block;width:20px;height:20px;border-radius:50%;margin-right:10px;background:#dc3545;animation:pulse 1s infinite;}
+.mic-status.idle{background:#6c757d;animation:none;}
+@keyframes pulse{0%{opacity:1;}50%{opacity:0.7;}100%{opacity:1;}}
+audio{width:100%;margin:10px 0;}
+</style>
+</head>
+<body>
+<div class='container'>
+  <h2 style='text-align:center;color:#333;margin-bottom:20px;'>🎤 AI Technical Interview</h2>
+  <div class='progress'><div class='progress-fill' id='progressFill' style='width:0%'></div></div>
+  <div style='text-align:center;margin-bottom:20px;'><span id='progressText'>Question 1 of 4</span></div>
+  <div class='status' id='st'>Initializing interview...</div>
+  <div class='question' id='q'></div>
+  <audio id='qa' controls style='display:none'></audio>
+  <div style='text-align:center;margin:15px 0;'>
+    <div class='mic-status' id='micStatus'></div>
+    <span id='micStatusText'>Preparing...</span>
+  </div>
+  <div class='transcript' id='live'><strong>Live transcription:</strong> <span style='color:#999;'>Listening for speech...</span></div>
+</div>
+
+<script>
+const SESSION_KEY="{{ session_key }}";
+const DEEPGRAM_API_KEY='6690abf90d1c62c6b70ed632900b2c093bc06d79';
+
+let sid=null,listening=false,isFinalizing=false;
+let ws=null,mediaRecorder=null,streamRef=null;
+let transcripts=[];
+
+function getProxyWsUrl(){
+  const loc=window.location;
+  const wsProto=loc.protocol==='https:'?'wss':'ws';
+  return wsProto+'://'+loc.host+'/dg_ws';
+}
+
+async function api(url,body){
+  const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  return await r.json();
+}
+
+async function start(){
+  console.log('🚀 Starting chatbot...');
+  document.getElementById('st').innerText='Starting...';
+  const data=await api('/ai/start',{session_key:SESSION_KEY});
+  console.log('✅ Response from /ai/start:',data);
+  if(data.error){
+    document.getElementById('st').innerText='Error: '+data.error;
+    return;
+  }
+  sid=data.session_id;
+  document.getElementById('q').innerText=data.question||'';
+  document.getElementById('st').innerText='Question asked. Speak your answer...';
+  document.getElementById('progressText').innerText='Question '+data.question_number+' of '+data.max_questions;
+  document.getElementById('progressFill').style.width=((data.question_number/data.max_questions)*100)+'%';
+  
+  if(data.audio_url && data.audio_url.trim()){
+    const qa=document.getElementById('qa');
+    qa.style.display='block';
+    qa.src=data.audio_url;
+    qa.onended=()=>beginRecord();
+    qa.play().catch(()=>beginRecord());
+  }else{
+    setTimeout(beginRecord,600);
+  }
+}
+
+async function beginRecord(){
+  if(listening)return;
+  listening=true;
+  transcripts=[];
+  document.getElementById('st').innerText='🎤 Listening...';
+  document.getElementById('live').innerHTML='<strong>Live transcription:</strong> <span style="color:#999">Listening...</span>';
+  
+  // Get microphone if not already available
+  if(!streamRef || !streamRef.active){
+    try{
+      console.log('🎤 Requesting microphone access...');
+      streamRef=await navigator.mediaDevices.getUserMedia({
+        audio:{
+          echoCancellation:false,
+          noiseSuppression:false,
+          autoGainControl:false
+        }
+      });
+      console.log('✅ Microphone access granted');
+      console.log('🎤 Audio track settings:', streamRef.getAudioTracks()[0].getSettings());
+    }catch(e){
+      console.error('❌ Microphone error:', e);
+      document.getElementById('st').innerText='Mic error: '+e.message;
+      return;
+    }
+  }else{
+    console.log('♻️ Reusing existing microphone stream');
+  }
+  
+  // Connect to Deepgram WebSocket
+  console.log('🔐 Connecting to Deepgram proxy...');
+  ws=new WebSocket(getProxyWsUrl());
+  ws.binaryType='arraybuffer';
+  
+  ws.onopen=()=>{
+    console.log('✅ Proxy connected');
+    // Send config
+    ws.send(JSON.stringify({
+      sample_rate:16000,
+      model:'general'
+    }));
+    console.log('📤 Sent config to proxy');
+  };
+  
+  ws.onmessage=(ev)=>{
+    try{
+      const data=JSON.parse(ev.data);
+      if(data.type==='Connected'){
+        console.log('✅ Deepgram connected - starting MediaRecorder');
+        startMediaRecorder();
+      }else if(data.channel && data.channel.alternatives && data.channel.alternatives[0]){
+        const t=data.channel.alternatives[0].transcript||'';
+        const isFinal=!!data.is_final;
+        console.log('📝 Transcript:', t, 'final:', isFinal);
+        if(isFinal && t.trim()){
+          transcripts.push(t);
+          updateLive();
+        }
+      }
+    }catch(err){
+      console.error('❌ Error parsing Deepgram message:', err);
+    }
+  };
+  
+  ws.onclose=(ev)=>{
+    console.log('❌ WebSocket closed:', ev.code, ev.reason);
+  };
+  
+  ws.onerror=(ev)=>{
+    console.error('❌ WebSocket error:', ev);
+  };
+  
+  // Auto-finalize after 5 seconds
+  setTimeout(()=>{
+    if(listening){
+      finalize();
+    }
+  }, 5000);
+}
+
+function startMediaRecorder(){
+  try{
+    console.log('🎙️ Starting MediaRecorder...');
+    
+    // Create MediaRecorder with PCM-like settings
+    const options = {
+      mimeType: 'audio/webm;codecs=opus',
+      audioBitsPerSecond: 128000
+    };
+    
+    mediaRecorder = new MediaRecorder(streamRef, options);
+    console.log('✅ MediaRecorder created:', mediaRecorder.mimeType);
+    
+    mediaRecorder.ondataavailable = async (e) => {
+      if (e.data.size > 0 && ws && ws.readyState === WebSocket.OPEN) {
+        console.log('🎵 Audio chunk:', e.data.size, 'bytes');
+        
+        // Convert to PCM and send
+        const arrayBuffer = await e.data.arrayBuffer();
+        const audioContext = new AudioContext({sampleRate: 16000});
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+        
+        // Get PCM data
+        const pcmData = audioBuffer.getChannelData(0);
+        const int16 = new Int16Array(pcmData.length);
+        for (let i = 0; i < pcmData.length; i++) {
+          let s = Math.max(-1, Math.min(1, pcmData[i]));
+          int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        }
+        
+        console.log('📤 Sending PCM data:', int16.buffer.byteLength, 'bytes');
+        ws.send(int16.buffer);
+        
+        await audioContext.close();
+      }
+    };
+    
+    mediaRecorder.onerror = (e) => {
+      console.error('❌ MediaRecorder error:', e);
+    };
+    
+    // Start recording with 100ms chunks
+    mediaRecorder.start(100);
+    console.log('✅ MediaRecorder started');
+    
+  }catch(err){
+    console.error('❌ Failed to start MediaRecorder:', err);
+  }
+}
+
+function updateLive(){
+  const combined=transcripts.join(' ').trim();
+  document.getElementById('live').innerHTML='<strong>Live transcription:</strong> '+(combined||'<span style="color:#999">Listening...</span>');
+}
+
+async function finalize(){
+  if(isFinalizing)return;
+  isFinalizing=true;
+  listening=false;
+  console.log('🎬 Finalizing...');
+  document.getElementById('st').innerText='Processing your answer...';
+  
+  // Stop MediaRecorder
+  if(mediaRecorder && mediaRecorder.state !== 'inactive'){
+    mediaRecorder.stop();
+    console.log('⏹️ MediaRecorder stopped');
+  }
+  
+  // Close WebSocket
+  if(ws){
+    ws.close();
+    ws=null;
+  }
+  
+  const transcript=transcripts.join(' ').trim();
+  console.log('📝 Final transcript:', transcript);
+  
+  const resp=await api('/ai/upload_answer',{
+    session_id:sid,
+    session_key:SESSION_KEY,
+    answer_text:transcript||'[No speech detected]'
+  });
+  
+  console.log('📥 Response:', resp);
+  isFinalizing=false;
+  
+  if(resp.completed){
+    document.getElementById('st').innerText='Interview complete! Redirecting...';
+    setTimeout(()=>{
+      window.parent.postMessage({type:'interview_complete'},'*');
+    },2000);
+  }else{
+    document.getElementById('q').innerText=resp.question||'';
+    document.getElementById('st').innerText=resp.message||'Next question...';
+    document.getElementById('progressText').innerText='Question '+resp.question_number+' of '+(resp.max_questions || 4);
+    document.getElementById('progressFill').style.width=((resp.question_number/(resp.max_questions || 4))*100)+'%';
+    
+    if(resp.audio_url){
+      const qa=document.getElementById('qa');
+      qa.src=resp.audio_url;
+      qa.onended=()=>beginRecord();
+      qa.play().catch(()=>beginRecord());
+    }else{
+      setTimeout(beginRecord,600);
+    }
+  }
+}
+
+// Auto-start on load
+setTimeout(()=>{
+  console.log('🚀 Auto-starting interview...');
+  start();
+},500);
+</script>
+</body>
+</html>
+

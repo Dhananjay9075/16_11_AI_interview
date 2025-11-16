@@ -1,0 +1,596 @@
+# AI-Powered Interview Platform
+
+An intelligent interview platform with AI-powered question generation, real-time proctoring, speech transcription, and comprehensive candidate evaluation.
+
+## Features
+
+- 🤖 **AI-Powered Interviews**: Automated question generation using Google Gemini AI
+- 🎥 **Real-time Proctoring**: Camera-based monitoring with face detection using YOLO
+- 🎤 **Speech Transcription**: Real-time audio transcription using OpenAI Whisper and Deepgram
+- 📝 **Resume Analysis**: Automatic resume parsing and evaluation
+- 📊 **Comprehensive Reports**: Detailed PDF reports with candidate performance metrics
+- 🔐 **ID Verification**: Document verification system
+- 💬 **Interactive Chatbot**: AI chatbot for interview assistance
+
+## Architecture Overview
+
+### System Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         CLIENT (Browser)                            │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐           │
+│  │   Web UI     │  │   Camera     │  │   Microphone │           │
+│  │  (Portal)    │  │  (Webcam)    │  │   (Audio)    │           │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘           │
+│         │                  │                  │                    │
+│         └──────────────────┼──────────────────┘                    │
+│                            │                                        │
+└────────────────────────────┼────────────────────────────────────────┘
+                             │
+                             │ HTTP/WebSocket
+                             │
+┌────────────────────────────▼────────────────────────────────────────┐
+│                    DJANGO BACKEND SERVER                            │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │                    Django Framework                           │  │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │  │
+│  │  │   Views.py   │  │   URLs.py    │  │  Models.py    │     │  │
+│  │  │  (API/Logic) │  │  (Routing)   │  │  (Database)   │     │  │
+│  │  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘     │  │
+│  └─────────┼─────────────────┼─────────────────┼──────────────┘  │
+│            │                  │                  │                  │
+│  ┌─────────▼──────────────────▼──────────────────▼──────────────┐  │
+│  │                    Core Modules                               │  │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │  │
+│  │  │ AI Chatbot   │  │   Camera     │  │  Proctoring   │     │  │
+│  │  │  Manager     │  │   Handler    │  │   Monitor     │     │  │
+│  │  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘     │  │
+│  └─────────┼─────────────────┼─────────────────┼──────────────┘  │
+│            │                  │                  │                  │
+└────────────┼──────────────────┼──────────────────┼─────────────────┘
+             │                  │                  │
+             │                  │                  │
+    ┌────────▼────────┐  ┌──────▼──────┐  ┌──────▼──────┐
+    │  AI Services     │  │  ML Models   │  │  Storage    │
+    │                  │  │              │  │             │
+    │  ┌────────────┐ │  │  ┌────────┐ │  │  ┌────────┐│
+    │  │  Gemini AI │ │  │  │  YOLO  │ │  │  │ SQLite  ││
+    │  │  (Q&A Gen) │ │  │  │  (Face) │ │  │  │   DB    ││
+    │  └────────────┘ │  │  └────────┘ │  │  └────────┘│
+    │  ┌────────────┐ │  │  ┌────────┐ │  │  ┌────────┐│
+    │  │ Google TTS │ │  │  │  │       │  │    Media  ││
+    │  │  (Speech)  │ │  │  │  │       │  │    Files  ││
+    │  └────────────┘ │  │  └────────┘ │  │  └────────┘│
+    │  ┌────────────┐ │  │  ┌────────┐ │  │             │
+    │  │  Deepgram   │ │  │  │ OpenCV │ │  │             │
+    │  │(Transcribe) │ │  │  │(Video) │ │  │             │
+    │  └────────────┘ │  │  └────────┘ │  │             │
+    └──────────────────┘  └─────────────┘  └─────────────┘
+```
+
+### Component Breakdown
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    FRONTEND LAYER                                │
+├─────────────────────────────────────────────────────────────────┤
+│ • Interview Portal (HTML/JS)                                     │
+│ • Real-time Video/Audio Capture                                  │
+│ • WebSocket Connection for Live Updates                          │
+└─────────────────────────────────────────────────────────────────┘
+                            ↕ HTTP/WS
+┌─────────────────────────────────────────────────────────────────┐
+│                    BACKEND LAYER                                │
+├─────────────────────────────────────────────────────────────────┤
+│  ┌──────────────────┐  ┌──────────────────┐  ┌────────────────┐│
+│  │  Request Handler│  │  Business Logic  │  │  Data Access   ││
+│  │  (Views.py)     │→ │  (AI Chatbot)   │→ │  (Models.py)   ││
+│  └──────────────────┘  └──────────────────┘  └────────────────┘│
+└─────────────────────────────────────────────────────────────────┘
+                            ↕
+┌─────────────────────────────────────────────────────────────────┐
+│                    EXTERNAL SERVICES                             │
+├─────────────────────────────────────────────────────────────────┤
+│ • Google Gemini AI    → Question Generation & Evaluation         │
+│ • Google Cloud TTS    → Text-to-Speech Conversion               │
+│ • OpenAI Whisper      → Audio Transcription                     │
+│ • Deepgram            → Real-time Speech Recognition            │
+│ • YOLO (Ultralytics)  → Face Detection & Proctoring            │
+└─────────────────────────────────────────────────────────────────┘
+                            ↕
+┌─────────────────────────────────────────────────────────────────┐
+│                    DATA LAYER                                    │
+├─────────────────────────────────────────────────────────────────┤
+│ • SQLite Database     → Session & Interview Data                │
+│ • Media Storage       → ID Cards, Snapshots, Audio Files         │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Interview Flow Diagram
+
+### Complete Interview Lifecycle
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                    INTERVIEW LIFECYCLE                            │
+└──────────────────────────────────────────────────────────────────┘
+
+    [1] SESSION CREATION
+         │
+         ├─► Admin/HR creates interview session
+         ├─► Candidate details entered (Name, Email, Resume, JD)
+         ├─► System generates unique session_key
+         └─► Interview link created: /?session_key=abc123...
+         │
+         ▼
+    [2] CANDIDATE ACCESS
+         │
+         ├─► Candidate opens interview link
+         ├─► System validates session_key
+         └─► Portal loads with session context
+         │
+         ▼
+    [3] ID VERIFICATION
+         │
+         ├─► Candidate uploads ID card image
+         ├─► System extracts ID details (OCR/AI)
+         ├─► Verification status stored
+         └─► Proceed to camera check
+         │
+         ▼
+    [4] CAMERA & AUDIO SETUP
+         │
+         ├─► Browser requests camera/microphone access
+         ├─► System verifies device availability
+         ├─► Camera feed initialized
+         └─► Audio recording ready
+         │
+         ▼
+    [5] PROCTORING ACTIVATION
+         │
+         ├─► Real-time video capture starts
+         ├─► YOLO face detection initialized
+         ├─► Proctoring monitoring begins
+         └─► Warning system active
+         │
+         ▼
+    [6] AI INTERVIEW START
+         │
+         ├─► Resume text analyzed
+         ├─► Job description processed
+         ├─► Gemini AI generates first question
+         ├─► Question converted to speech (Google TTS)
+         └─► Audio URL returned to frontend
+         │
+         ▼
+    ┌──────────────────────────────────────────────────────────┐
+    │              QUESTION-ANSWER LOOP (Repeats)               │
+    └──────────────────────────────────────────────────────────┘
+         │
+         ├─► [7] QUESTION PRESENTATION
+         │    │
+         │    ├─► Question text displayed
+         │    ├─► Audio playback (if available)
+         │    └─► Timer starts
+         │    │
+         │    ▼
+         ├─► [8] CANDIDATE RESPONSE
+         │    │
+         │    ├─► Candidate speaks answer
+         │    ├─► Audio recorded in real-time
+         │    ├─► Deepgram transcribes speech
+         │    └─► Transcript stored
+         │    │
+         │    ▼
+         ├─► [9] PROCTORING MONITORING (Continuous)
+         │    │
+         │    ├─► Face detection (YOLO)
+         │    ├─► Multiple person detection
+         │    ├─► Tab switching detection
+         │    ├─► Warning logs created
+         │    └─► Snapshots captured on warnings
+         │    │
+         │    ▼
+         ├─► [10] AI EVALUATION
+         │    │
+         │    ├─► Gemini AI analyzes answer
+         │    ├─► Scores assigned (content, clarity, etc.)
+         │    ├─► Feedback generated
+         │    
+         │    │
+         │    ▼
+         └─► [11] NEXT QUESTION GENERATION
+              │
+              ├─► AI decides next question type
+              ├─► Context from previous answers used
+              ├─► Question generated
+              └─► Loop continues until max questions reached
+              │
+              ▼
+    [12] INTERVIEW COMPLETION
+         │
+         ├─► Final evaluation performed
+         ├─► Overall scores calculated
+         ├─► Behavioral analysis generated
+         └─► Session status → COMPLETED
+         │
+         ▼
+    [13] REPORT GENERATION
+         │
+         ├─► Comprehensive report created
+         ├─► PDF generated (WeasyPrint)
+         ├─► Includes:
+         │   ├─► Candidate performance scores
+         │   ├─► Question-answer pairs
+         │   ├─► AI feedback
+         │   ├─► Proctoring warnings
+         │   └─► Recommendations
+         └─► Report downloadable
+         │
+         ▼
+    [14] SESSION CLOSURE
+         │
+         ├─► Camera resources released
+         ├─► Session archived
+         └─► Data available for review
+```
+
+### Detailed Flow: Question-Answer Cycle
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│              SINGLE QUESTION-ANSWER CYCLE                        │
+└─────────────────────────────────────────────────────────────────┘
+
+    START
+     │
+     ▼
+┌─────────────────┐
+│  AI Generates   │ ──► Gemini AI uses:
+│   Question      │     • Resume content
+│                 │     • Job description
+└────────┬────────┘     • Previous answers
+         │              • Question type (Technical/Behavioral)
+         │
+         ▼
+┌─────────────────┐
+│  TTS Conversion │ ──► Google Cloud TTS converts
+│  (Optional)     │     text to MP3 audio
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Question       │ ──► Frontend displays:
+│  Presentation   │     • Question text
+         │              • Audio player
+         │              • Timer
+         │
+         ▼
+┌─────────────────┐
+│  Candidate      │ ──► Real-time:
+│  Responds       │     • Audio recording
+         │              • Speech transcription
+         │              • Proctoring monitoring
+         │
+         ▼
+┌─────────────────┐
+│  Transcription  │ ──► Whisper/Deepgram:
+│  Processing     │     • Converts speech to text
+         │              • Calculates WPM
+         │              • Detects filler words
+         │
+         ▼
+┌─────────────────┐
+│  AI Evaluation  │ ──► Gemini AI analyzes:
+│                 │     • Answer quality
+         │              • Relevance to question
+         │              • Technical accuracy
+         │              • Communication skills
+         │
+         ▼
+┌─────────────────┐
+│  Store Results  │ ──► Database stores:
+│                 │     • Question text
+         │              • Answer transcript
+         │              • Scores & feedback
+         │              • Metrics
+         │
+         ▼
+    NEXT QUESTION
+    (or Complete)
+```
+
+### Data Flow Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        DATA FLOW                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+INPUT DATA
+    │
+    ├─► Candidate Info (Name, Email)
+    ├─► Resume (PDF/DOCX → Text)
+    ├─► Job Description
+    └─► ID Card Image
+    │
+    ▼
+┌─────────────────┐
+│  Processing     │
+│  Layer          │
+└────────┬────────┘
+         │
+         ├─► Resume Parsing (PyPDF2, python-docx)
+         ├─► Text Extraction
+         └─► ID Verification (OCR/AI)
+         │
+         ▼
+┌─────────────────┐
+│  AI Processing  │
+│  (Gemini)       │
+└────────┬────────┘
+         │
+         ├─► Question Generation
+         ├─► Answer Evaluation
+         └─► Feedback Generation
+         │
+         ▼
+┌─────────────────┐
+│  Media          │
+│  Processing     │
+└────────┬────────┘
+         │
+         ├─► Audio: Speech → Text (Whisper/Deepgram)
+         ├─► Video: Face Detection (YOLO)
+         └─► Text → Speech (Google TTS)
+         │
+         ▼
+┌─────────────────┐
+│  Storage        │
+│  Layer          │
+└────────┬────────┘
+         │
+         ├─► SQLite: Session data, questions, answers
+         ├─► Media Files: ID cards, snapshots, audio
+         └─► Generated Reports: PDF files
+         │
+         ▼
+OUTPUT DATA
+    │
+    ├─► Interview Report (PDF)
+    ├─► Performance Scores
+    ├─► Proctoring Logs
+    └─► Recommendations
+```
+
+### Technology Stack Flow
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    TECHNOLOGY STACK                              │
+└─────────────────────────────────────────────────────────────────┘
+
+Frontend Technologies
+    │
+    ├─► HTML5 / JavaScript
+    ├─► WebRTC (Camera/Microphone)
+    ├─► WebSocket (Real-time updates)
+    └─► MediaRecorder API
+    │
+    ▼
+Backend Framework
+    │
+    ├─► Django (Python Web Framework)
+    ├─► Django REST Framework (API)
+    ├─► Channels (WebSocket support)
+    └─► SQLite (Database)
+    │
+    ▼
+AI & ML Services
+    │
+    ├─► Google Gemini AI
+    │   └─► Question Generation
+    │   └─► Answer Evaluation
+    │
+    ├─► Google Cloud TTS
+    │   └─► Text-to-Speech
+    │
+    ├─► OpenAI Whisper
+    │   └─► Speech-to-Text
+    │
+    ├─► Deepgram
+    │   └─► Real-time Transcription
+    │
+    └─► YOLO (Ultralytics)
+        └─► Face Detection
+    │
+    ▼
+Supporting Libraries
+    │
+    ├─► OpenCV (Video Processing)
+    ├─► PyPDF2 (PDF Parsing)
+    ├─► python-docx (DOCX Parsing)
+    ├─► WeasyPrint (PDF Generation)
+    └─► NumPy (Data Processing)
+```
+
+## Prerequisites
+
+- Python 3.10 or higher
+- pip (Python package manager)
+- Webcam (for proctoring features)
+- Google Cloud account (for Text-to-Speech - optional)
+- Gemini API key (for AI features)
+
+## Installation
+
+### 1. Clone the Repository
+
+```bash
+git clone <repository-url>
+cd 15_11_NEW
+```
+
+### 2. Create Virtual Environment
+
+**Windows:**
+```bash
+python -m venv venv
+venv\Scripts\activate
+```
+
+**Linux/Mac:**
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+
+### 3. Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+Django>=4.2.0,<5.0.0
+djangorestframework>=3.14.0
+django-cors-headers>=4.0.0
+channels>=4.0.0
+channels-redis>=4.1.0
+
+# AI and ML
+google-generativeai>=0.3.0
+openai-whisper>=20231117
+google-cloud-texttospeech>=2.14.0
+numpy>=1.24.0
+torch>=2.0.0
+ultralytics>=8.0.0
+opencv-python>=4.8.0
+faiss-cpu>=1.7.4
+sentence-transformers>=2.2.0
+
+# Document processing
+PyPDF2>=3.0.0
+python-docx>=1.0.0
+weasyprint>=59.0
+
+# Utilities
+python-dotenv>=1.0.0
+pytz>=2023.3
+textblob>=0.17.1
+psutil>=5.9.0
+readtime>=1.1.0
+requests>=2.31.0
+
+
+
+
+
+
+**Note:** If you encounter dependency conflicts, try:
+```bash
+pip install -r requirements.txt --legacy-peer-deps
+```
+
+### 4. Environment Configuration
+
+Create a `.env` file in the project root directory:
+
+```env 
+# Django Settings
+DJANGO_SECRET_KEY=your-secret-key-here
+DJANGO_DEBUG=1
+
+# Gemini AI API Key (Required for AI features)
+GEMINI_API_KEY=your-gemini-api-key-here
+
+# Google Cloud Text-to-Speech (Optional)
+GOOGLE_APPLICATION_CREDENTIALS=path/to/your/google-credentials.json
+
+# Deepgram API Key (Optional, for real-time transcription)
+DEEPGRAM_API_KEY=your-deepgram-api-key-here
+
+
+### 5. Database Setup
+
+Run migrations to create the database:
+
+```bash
+python manage.py migrate
+```
+
+Create a superuser (optional, for admin access):
+
+```bash
+python manage.py createsuperuser
+```
+
+## Running the Server
+
+### Start the Development Server
+
+```bash
+python manage.py runserver
+```
+
+The server will start at `http://localhost:8000`
+
+### Access Points
+
+- **Interview Portal**: `http://localhost:8000/`
+
+## Starting an Interview
+
+There are multiple ways to start an interview session:
+
+### Method 1: Using the Web Interface
+
+1. Navigate to `http://localhost:8000/start/`
+2. Fill in the form:
+   - Candidate Name (required)
+   - Candidate Email (optional)
+   - Job Description (optional)
+
+3. Click "Start Interview"
+4. You'll be redirected to the interview portal with the session key
+
+
+
+## Interview Flow
+
+1. **Access Interview Link**: Candidate opens the interview link
+2. **ID Verification**: Candidate uploads ID card for verification
+3. **Camera Check**: System verifies camera access
+4. **Interview Start**: AI generates questions based on resume and job description
+5. **Real-time Proctoring**: System monitors candidate behavior
+6. **Question-Answer**: Candidate answers AI-generated questions
+7. **Evaluation**: AI evaluates responses and generates feedback
+8. **Report Generation**: Comprehensive PDF report is generated
+
+
+
+## Project Structure
+
+```
+15_11_NEW/
+├── interview_app/          # Main Django application
+│   ├── models.py            # Database models
+│   ├── views.py             # View functions and API endpoints
+│   ├── urls.py              # URL routing
+│   ├── settings.py          # Django settings
+│   ├── ai_chatbot.py        # AI chatbot logic
+│   ├── yolo_face_detector.py # Face detection using YOLO
+│   ├── simple_real_camera.py # Camera handling
+│   ├── templates/           # HTML templates
+│   └── management/commands/ # Django management commands
+│       └── generate_link.py # Generate interview link command
+├── media/                   # Uploaded media files
+│   ├── id_cards/           # ID card images
+│   ├── proctoring_snaps/   # Proctoring snapshots
+│   └── tts/                # Text-to-speech audio files
+├── db.sqlite3              # SQLite database
+├── manage.py              # Django management script
+├── requirements.txt       # Python dependencies
+└── README.md             # This file
+```
+
+#

@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset='utf-8'>
+<meta name='viewport' content='width=device-width,initial-scale=1'>
+<title>AI Interview Bot</title>
+<style>
+body{font-family:'Segoe UI',Tahoma,Arial;margin:0;padding:16px;background:#f5f5f5;} 
+.container{background:#fff;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.08);padding:20px;max-width:800px;margin:0 auto;}
+.status{padding:15px;border-radius:8px;background:#e7f3ff;color:#0c5460;margin:15px 0;text-align:center;font-weight:600;}
+.question{font-size:18px;font-weight:600;margin:20px 0;padding:15px;background:#f8f9fa;border-radius:8px;border-left:4px solid #007bff;}
+.transcript{background:#f8f9fa;padding:15px;border-radius:8px;margin:15px 0;border-left:3px solid #28a745;min-height:60px;}
+.progress{width:100%;height:20px;background:#e9ecef;border-radius:10px;overflow:hidden;margin:15px 0;}
+.progress-fill{height:100%;background:#007bff;transition:width 0.3s ease;}
+audio{width:100%;margin:10px 0;}
+</style>
+</head>
+<body>
+<div class='container'>
+  <h2 style='text-align:center;color:#333;margin-bottom:20px;'>🎤 AI Technical Interview</h2>
+  <div class='progress'><div class='progress-fill' id='progressFill' style='width:0%'></div></div>
+  <div style='text-align:center;margin-bottom:20px;'><span id='progressText'>Question 1 of 4</span></div>
+  <div class='status' id='st'>Initializing interview...</div>
+  <div class='question' id='q'></div>
+  <audio id='qa' controls style='display:none'></audio>
+  <div class='transcript' id='live'><strong>Live transcription:</strong> <span style='color:#999;'>Listening for speech...</span></div>
+</div>
+
+<script>
+const SESSION_KEY="{{ session_key }}";
+const DEEPGRAM_API_KEY='6690abf90d1c62c6b70ed632900b2c093bc06d79';
+
+let sid=null,listening=false,isFinalizing=false;
+let ws=null,audioContext=null,processor=null,source=null,streamRef=null;
+let transcripts=[],currentInterim='';
+let recordingStartMs=0,lastSpeechMs=0;
+const INITIAL_SILENCE_MS=5000,SPEECH_INACTIVITY_MS=5000;
+
+async function api(url,body){
+  const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  return await r.json();
+}
+
+async function start(){
+  console.log('🚀 Starting chatbot...');
+  console.log('🔑 SESSION_KEY from template:', SESSION_KEY);
+  console.log('🔑 SESSION_KEY type:', typeof SESSION_KEY);
+  console.log('🔑 SESSION_KEY length:', SESSION_KEY ? SESSION_KEY.length : 0);
+  
+  if (!SESSION_KEY || SESSION_KEY.trim() === '') {
+    console.error('❌ ERROR: SESSION_KEY is empty!');
+    document.getElementById('st').innerText='Error: Session key is missing. Please refresh the page.';
+    return;
+  }
+  
+  document.getElementById('st').innerText='Starting...';
+  // Read optional question_count from parent URL (passed as ?qc= in portal)
+  let questionCount = null;
+  try {
+    const parentUrl = window.parent?.location?.href || window.location.href;
+    const urlObj = new URL(parentUrl);
+    const qc = urlObj.searchParams.get('qc');
+    console.log('📊 Question count from URL (qc):', qc);
+    if (qc) {
+      questionCount = parseInt(qc, 10);
+      console.log('✅ Parsed question count:', questionCount);
+    }
+  } catch (e) {
+    console.warn('Could not read question_count from URL:', e);
+  }
+
+  const payload = {session_key:SESSION_KEY};
+  console.log('📦 Payload before adding question_count:', payload);
+  if (questionCount && questionCount > 0) {
+    payload.question_count = questionCount;
+    console.log('✅ Added question_count to payload:', questionCount);
+  }
+  console.log('📦 Final payload:', payload);
+
+  const data=await api('/ai/start', payload);
+  console.log('✅ Response from /ai/start:',data);
+  if(data.error){
+    document.getElementById('st').innerText='Error: '+data.error;
+    return;
+  }
+  sid=data.session_id;
+  const questionText=data.question||data.next_question||'';
+  console.log('📝 Question text:',questionText);
+  
+  // Always show question text if available
+  if(questionText){
+    document.getElementById('q').innerText=questionText;
+  }else{
+    console.log('⚠️ No question text provided, will show when audio plays');
+  }
+  
+  document.getElementById('progressText').innerText='Question '+data.question_number+' of '+data.max_questions;
+  document.getElementById('progressFill').style.width=((data.question_number/data.max_questions)*100)+'%';
+  
+  if(data.audio_url && data.audio_url.trim()){
+    document.getElementById('st').innerText='🔊 Playing question audio...';
+    const qa=document.getElementById('qa');
+    qa.style.display='block';
+    qa.src=data.audio_url;
+    qa.onended=()=>{
+      document.getElementById('st').innerText='🎤 Speak your answer now...';
+      beginRecord();
+    };
+    qa.play().catch(()=>{
+      document.getElementById('st').innerText='🎤 Speak your answer now...';
+      beginRecord();
+    });
+  }else{
+    // Use browser's built-in TTS as fallback when Google Cloud TTS is not available
+    if(questionText && 'speechSynthesis' in window){
+      document.getElementById('st').innerText='🔊 Speaking question...';
+      const utterance=new SpeechSynthesisUtterance(questionText);
+      utterance.rate=0.9;
+      utterance.pitch=1.0;
+      utterance.volume=1.0;
+      utterance.onend=()=>{
+        document.getElementById('st').innerText='🎤 Speak your answer now...';
+        setTimeout(beginRecord,600);
+      };
+      utterance.onerror=()=>{
+        document.getElementById('st').innerText='🎤 Speak your answer now...';
+        setTimeout(beginRecord,600);
+      };
+      speechSynthesis.speak(utterance);
+    }else{
+      document.getElementById('st').innerText='🎤 Speak your answer now...';
+      setTimeout(beginRecord,600);
+    }
+  }
+}
+
+async function beginRecord(){
+  if(listening)return;
+  listening=true;
+  transcripts=[];
+  document.getElementById('st').innerText='🎤 Listening...';
+  document.getElementById('live').innerHTML='<strong>Live transcription:</strong> <span style="color:#999">Listening...</span>';
+  
+  // Get microphone if not already available
+  if(!streamRef || !streamRef.active){
+    try{
+      console.log('🎤 Requesting microphone access...');
+      streamRef=await navigator.mediaDevices.getUserMedia({
+        audio:{
+          echoCancellation:true,  // Enable to reduce background noise
+          noiseSuppression:true,  // Enable to reduce ambient noise
+          autoGainControl:true,   // Enable to boost quiet voices
+          sampleRate:16000        // Optimal for speech recognition
+        }
+      });
+      console.log('✅ Microphone access granted');
+      const track=streamRef.getAudioTracks()[0];
+      console.log('🎤 Track:', track.label, 'Settings:', track.getSettings());
+    }catch(e){
+      console.error('❌ Microphone error:', e);
+      document.getElementById('st').innerText='Mic error: '+e.message;
+      return;
+    }
+  }else{
+    console.log('♻️ Reusing existing microphone stream');
+  }
+  
+  // Create audio context if needed
+  if(!audioContext || audioContext.state==='closed'){
+    console.log('🎙️ Creating audio context...');
+    audioContext=new (window.AudioContext||window.webkitAudioContext)();
+    console.log('🎙️ Audio context SR:', audioContext.sampleRate);
+  }else{
+    console.log('♻️ Reusing audio context, state:', audioContext.state);
+  }
+  
+  // Resume if suspended
+  if(audioContext.state==='suspended'){
+    await audioContext.resume();
+    console.log('✅ Audio context resumed');
+  }
+  
+  // Create source if needed (ONLY ONCE!)
+  if(!source){
+    source=audioContext.createMediaStreamSource(streamRef);
+    console.log('✅ Media stream source created');
+  }else{
+    console.log('♻️ Reusing media stream source');
+  }
+  
+  // Connect to Deepgram DIRECTLY - MATCH ORIGINAL index.html
+  const sampleRate=audioContext.sampleRate;
+  const deepgramUrl=`wss://api.deepgram.com/v1/listen?model=nova-3&language=en-IN&encoding=linear16&sample_rate=${sampleRate}&channels=1&interim_results=true&punctuate=false&smart_format=false`;
+  
+  console.log('🔗 Connecting directly to Deepgram (nova-3, en-IN)...');
+  ws=new WebSocket(deepgramUrl,['token',DEEPGRAM_API_KEY]);
+  ws.binaryType='arraybuffer';
+  
+  ws.onopen=()=>{
+    console.log('✅ Connected to Deepgram!');
+    
+    // Create gain node to amplify audio
+    const gainNode=audioContext.createGain();
+    gainNode.gain.value=3.0;  // Amplify by 3x for better detection
+    console.log('🔊 Gain node created: 3x amplification');
+    
+    // Create ScriptProcessor - MATCH ORIGINAL: MONO input (1 channel)
+    console.log('🔧 Creating ScriptProcessor...');
+    processor=audioContext.createScriptProcessor(4096,1,1);  // Changed from (4096,2,1) to (4096,1,1)
+    let packetCount=0;
+    let soundDetectedCount=0;
+    
+    processor.onaudioprocess=(e)=>{
+      if(ws.readyState!==WebSocket.OPEN)return;
+      
+      packetCount++;
+      
+      // Get MONO audio data (channel 0 only)
+      const audioData=e.inputBuffer.getChannelData(0);
+      
+      // Debug: Check if audio data is all zeros
+      if(packetCount === 1){
+        let allZeros = true;
+        for(let i=0; i<Math.min(100, audioData.length); i++){
+          if(audioData[i] !== 0){
+            allZeros = false;
+            break;
+          }
+        }
+        console.log('🔍 First packet audio check - All zeros?', allZeros);
+        console.log('🔍 Sample values - [0]:', audioData[0], '[1]:', audioData[1], '[2]:', audioData[2]);
+        console.log('🔍 Buffer length:', audioData.length, 'Channels:', e.inputBuffer.numberOfChannels);
+      }
+      
+      // Calculate RMS (same as original app.py)
+      let sum=0;
+      for(let i=0;i<audioData.length;i++){
+        sum+=audioData[i]*audioData[i];
+      }
+      const rms=Math.sqrt(sum/audioData.length);
+      
+      if(packetCount % 50 === 1){
+        console.log('🎵 Packet#', packetCount, '| RMS:', rms.toFixed(6), '| Sound detected:', soundDetectedCount, 'times');
+      }
+      
+      if(rms>0.001){  // Lower threshold to detect quieter audio
+        soundDetectedCount++;
+        if(soundDetectedCount % 10 === 1){
+          console.log('🔊 Sound detected! RMS:', rms.toFixed(4), '| Total detections:', soundDetectedCount);
+        }
+      }
+      
+      // Convert to INT16 (same as original)
+      const int16=new Int16Array(audioData.length);
+      for(let i=0;i<audioData.length;i++){
+        let s=audioData[i];
+        s=Math.max(-1,Math.min(1,s));
+        int16[i]=s<0?s*0x8000:s*0x7FFF;
+      }
+      
+      ws.send(int16.buffer);
+    };
+    
+    // Connect audio graph
+    source.connect(processor);
+    processor.connect(audioContext.destination);
+    console.log('✅ Audio graph connected');
+    
+    // Keep references
+    window._processor=processor;
+    window._source=source;
+    window._audioContext=audioContext;
+  };
+  
+  let messageCount = 0;
+  ws.onmessage=(ev)=>{
+    try{
+      messageCount++;
+      const data=JSON.parse(ev.data);
+      if(messageCount % 10 === 1){
+        console.log('📨 Deepgram message#', messageCount, ':', data);
+      }
+      if(data.channel && data.channel.alternatives && data.channel.alternatives[0]){
+        const t=data.channel.alternatives[0].transcript||'';
+        const isFinal=!!data.is_final;
+        if(isFinal && t.trim()){
+          console.log('📝 FINAL:', t);
+          transcripts.push(t);
+          currentInterim='';  // Clear interim
+          lastSpeechMs=Date.now();  // Update speech timestamp
+          updateLive();
+        }else if(t.trim()){
+          console.log('📝 interim:', t);
+          currentInterim=t;  // Store interim
+          lastSpeechMs=Date.now();  // Update speech timestamp
+          updateLive();  // Update display with interim
+        }else{
+          if(messageCount % 10 === 1){
+            console.log('📝 Empty transcript');
+          }
+        }
+      }
+    }catch(err){
+      console.error('❌ Parse error:', err, ev.data);
+    }
+  };
+  
+  ws.onclose=(ev)=>{
+    console.log('🔌 Deepgram closed:', ev.code);
+  };
+  
+  ws.onerror=(ev)=>{
+    console.error('❌ Deepgram error:', ev);
+  };
+  
+  // Start inactivity timer
+  recordingStartMs=Date.now();
+  lastSpeechMs=recordingStartMs;
+  tickInactive();
+}
+
+function updateLive(){
+  const final=transcripts.join(' ').trim();
+  const combined=(final+(currentInterim?' '+currentInterim:'')).trim();
+  
+  let html='<strong>Live transcription:</strong> ';
+  if(final){
+    html+=`<span style="color:#333">${final}</span>`;
+  }
+  if(currentInterim){
+    html+=` <span style="color:#007bff; background:#e7f3ff; padding:2px 4px; border-radius:3px">${currentInterim}</span>`;
+  }
+  if(!final && !currentInterim){
+    html+='<span style="color:#999">Listening...</span>';
+  }
+  
+  document.getElementById('live').innerHTML=html;
+}
+
+function tickInactive(){
+  if(!listening)return;
+  const now=Date.now();
+  const noSpeechDuration=now-lastSpeechMs;
+  const initialSilenceDuration=now-recordingStartMs;
+  
+  // Auto-finalize if: 5s initial silence OR 5s after last speech
+  if(transcripts.length===0 && initialSilenceDuration>=INITIAL_SILENCE_MS){
+    console.log('⏰ Initial silence timeout (5s) - finalizing...');
+    finalize();
+    return;
+  }
+  
+  if(transcripts.length>0 && noSpeechDuration>=SPEECH_INACTIVITY_MS){
+    console.log('⏰ Speech inactivity timeout (5s) - finalizing...');
+    console.log(`   Last speech: ${Math.floor(noSpeechDuration/1000)}s ago`);
+    finalize();
+    return;
+  }
+  
+  // Check again in 500ms
+  setTimeout(tickInactive,500);
+}
+
+async function finalize(){
+  if(isFinalizing)return;
+  isFinalizing=true;
+  listening=false;
+  console.log('🎬 Finalizing...');
+  document.getElementById('st').innerText='Processing your answer...';
+  
+  // Stop processor
+  if(processor){
+    processor.disconnect();
+    processor=null;
+    console.log('⏹️ Processor stopped');
+  }
+  
+  // Close WebSocket
+  if(ws){
+    ws.close();
+    ws=null;
+  }
+  
+  const transcript=transcripts.join(' ').trim();
+  console.log('📝 Final transcript:', transcript);
+  
+  const resp=await api('/ai/upload_answer',{
+    session_id:sid,
+    transcript:transcript||'[No speech detected]',
+    question_number:1  // Will be tracked by backend
+  });
+  
+  console.log('📥 Response:', resp);
+  
+  // Handle acknowledge (no speech detected) - just restart recording
+  if(resp.acknowledge){
+    console.log('⚠️ Acknowledge response - no speech detected, retrying...');
+    isFinalizing=false;
+    transcripts=[];
+    currentInterim='';
+    updateLive();
+    document.getElementById('st').innerText='❌ No speech detected. Please speak clearly...';
+    setTimeout(()=>{
+      document.getElementById('st').innerText='🎤 Speak your answer now...';
+      beginRecord();
+    },1500);
+    return;
+  }
+  
+  if(resp.completed){
+    isFinalizing=false;
+    document.getElementById('st').innerText='🎉 Technical Q&A Complete!';
+
+    // Notify parent window that Q&A is complete; parent will redirect
+    // to the summary/report page with AI evaluation + proctoring PDFs.
+    try{
+      window.parent.postMessage({type:'qa_completed'},'*');
+    }catch(e){
+      console.error('Failed to post qa_completed message to parent:', e);
+    }
+
+    // Show a simple completion message inside the iframe (no coding button)
+    document.getElementById('q').innerHTML=`
+      <div style="text-align:center; padding:2rem;">
+        <h3 style="color:#28a745; margin-bottom:1rem;">🎉 Technical Interview Complete!</h3>
+        <p style="color:#666; margin-bottom:1.5rem;">
+          You can now close this window. Your interview results page will open outside this panel.
+        </p>
+      </div>
+    `;
+    document.getElementById('live').style.display='none';
+  }else{
+    // Reset for next question
+    transcripts=[];
+    currentInterim='';
+    updateLive();
+    isFinalizing=false;
+    
+    const nextQuestionText=resp.question||resp.next_question||'';
+    console.log('📝 Next question text:',nextQuestionText);
+    console.log('📥 Full response:',resp);
+    
+    // Update question text ONLY if we have text
+    if(nextQuestionText){
+      document.getElementById('q').innerText=nextQuestionText;
+    }else{
+      console.log('⚠️ No question text, keeping previous question visible');
+    }
+    
+    document.getElementById('progressText').innerText='Question '+resp.question_number+' of '+(resp.max_questions || 4);
+    document.getElementById('progressFill').style.width=((resp.question_number/(resp.max_questions || 4))*100)+'%';
+    
+    if(resp.audio_url){
+      document.getElementById('st').innerText='🔊 Playing next question...';
+      const qa=document.getElementById('qa');
+      qa.style.display='block';
+      qa.src=resp.audio_url;
+      qa.onended=()=>{
+        document.getElementById('st').innerText='🎤 Speak your answer now...';
+        beginRecord();
+      };
+      qa.play().catch(e=>{
+        console.log('⚠️ Audio play failed, starting recording anyway:', e);
+        document.getElementById('st').innerText='🎤 Speak your answer now...';
+        beginRecord();
+      });
+    }else{
+      // Use browser's built-in TTS as fallback when Google Cloud TTS is not available
+      if(nextQuestionText && 'speechSynthesis' in window){
+        console.log('⚠️ No audio URL, using browser TTS fallback');
+        document.getElementById('st').innerText='🔊 Speaking question...';
+        const utterance=new SpeechSynthesisUtterance(nextQuestionText);
+        utterance.rate=0.9;
+        utterance.pitch=1.0;
+        utterance.volume=1.0;
+        utterance.onend=()=>{
+          document.getElementById('st').innerText='🎤 Speak your answer now...';
+          setTimeout(beginRecord,600);
+        };
+        utterance.onerror=()=>{
+          document.getElementById('st').innerText='🎤 Speak your answer now...';
+          setTimeout(beginRecord,600);
+        };
+        speechSynthesis.speak(utterance);
+      }else{
+        console.log('⚠️ No audio URL in response, starting recording immediately');
+        document.getElementById('st').innerText='🎤 Speak your answer now...';
+        setTimeout(beginRecord,600);
+      }
+    }
+  }
+}
+
+// Auto-start on load
+setTimeout(()=>{
+  console.log('🚀 Auto-starting interview...');
+  start();
+},500);
+</script>
+</body>
+</html>
+

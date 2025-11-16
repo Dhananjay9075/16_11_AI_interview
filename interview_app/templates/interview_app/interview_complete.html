@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interview Complete</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            padding: 60px;
+            text-align: center;
+            max-width: 600px;
+            margin: 20px;
+        }
+        
+        .success-icon {
+            width: 80px;
+            height: 80px;
+            background: #4CAF50;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 30px;
+            animation: pulse 2s infinite;
+        }
+        
+        .success-icon::before {
+            content: "✓";
+            color: white;
+            font-size: 40px;
+            font-weight: bold;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 2.5em;
+        }
+        
+        .message {
+            color: #666;
+            font-size: 1.2em;
+            line-height: 1.6;
+            margin-bottom: 40px;
+        }
+        
+        .details {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 30px;
+            margin: 30px 0;
+            text-align: left;
+        }
+        
+        .detail-item {
+            margin: 15px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .detail-label {
+            font-weight: 600;
+            color: #555;
+        }
+        
+        .detail-value {
+            color: #333;
+        }
+        
+        .next-steps {
+            background: #e3f2fd;
+            border-left: 4px solid #2196F3;
+            padding: 20px;
+            margin: 30px 0;
+            text-align: left;
+        }
+        
+        .next-steps h3 {
+            color: #1976D2;
+            margin-top: 0;
+        }
+        
+        .next-steps ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        
+        .next-steps li {
+            margin: 8px 0;
+            color: #555;
+        }
+        
+        .close-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 25px;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: transform 0.2s;
+            margin-top: 20px;
+        }
+        
+        .close-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+        }
+        
+        .footer {
+            margin-top: 40px;
+            color: #888;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="success-icon"></div>
+        
+        <h1>Interview Complete!</h1>
+        
+        <div class="message">
+            Thank you for completing your AI interview. Your responses have been recorded and will be evaluated by our team.
+        </div>
+        
+        <div class="details">
+            <div class="detail-item">
+                <span class="detail-label">Interview Status:</span>
+                <span class="detail-value">✅ Completed</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Submission Time:</span>
+                <span class="detail-value">{{ submission_time|default:"Just now" }}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Questions Answered:</span>
+                <span class="detail-value">{{ questions_answered|default:"All questions" }}</span>
+            </div>
+        </div>
+        
+        <div class="next-steps">
+            <h3>What happens next?</h3>
+            <ul>
+                <li>Your interview responses will be analyzed by our AI system</li>
+                <li>Our hiring team will review your performance</li>
+                <li>You will receive feedback within 24-48 hours</li>
+                <li>If selected, we'll contact you for the next round</li>
+            </ul>
+        </div>
+        
+        <button class="close-btn" onclick="closeInterview()">
+            Close Interview
+        </button>
+        
+        <div class="footer">
+            <p>Thank you for your time and best of luck!</p>
+            <p>If you have any questions, please contact our support team.</p>
+        </div>
+    </div>
+    
+    <script>
+        // Function to release camera and microphone resources
+        async function releaseMediaResources() {
+            try {
+                // Release all media streams
+                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                    // Stop all tracks from all streams
+                    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+                        .then(stream => {
+                            stream.getTracks().forEach(track => {
+                                track.stop();
+                                console.log('Released media track:', track.kind);
+                            });
+                        })
+                        .catch(err => {
+                            console.log('No active media streams to release');
+                        });
+                }
+                
+                // Release any existing streams that might be stored in variables
+                if (window.verificationStream) {
+                    window.verificationStream.getTracks().forEach(track => track.stop());
+                    console.log('Released verification stream');
+                }
+                
+                // Close any audio contexts
+                if (window.audioContext) {
+                    window.audioContext.close().catch(e => console.log('Audio context already closed'));
+                    console.log('Closed audio context');
+                }
+                
+                // Stop any media recorders
+                if (window.mediaRecorder && window.mediaRecorder.state !== 'inactive') {
+                    window.mediaRecorder.stop();
+                    console.log('Stopped media recorder');
+                }
+                
+                // Try to release backend camera resources if we have session info
+                try {
+                    // Get session key from URL if available
+                    const urlParams = new URLSearchParams(window.location.search);
+                    let sessionKey = urlParams.get('session_key');
+                    
+                    // If not in URL, try to get from Django context
+                    if (!sessionKey && typeof '{{ session_key }}' !== 'undefined' && '{{ session_key }}') {
+                        sessionKey = '{{ session_key }}';
+                    }
+                    
+                    if (sessionKey) {
+                        await fetch('/interview_app/release_camera/', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ session_key: sessionKey })
+                        });
+                        console.log('Backend camera resources released for session:', sessionKey);
+                    }
+                } catch (error) {
+                    console.log('Error releasing backend camera:', error);
+                }
+                
+                console.log('All media resources released successfully');
+            } catch (error) {
+                console.log('Error releasing media resources:', error);
+            }
+        }
+        
+        function closeInterview() {
+            // Show user-friendly message with instructions to close the tab
+            alert("Interview completed successfully! Please close this browser tab manually using:\n\n• Ctrl+W (Windows/Linux)\n• Cmd+W (Mac)\n• Or click the X button on the tab");
+        }
+        
+        // Release media resources when page is about to unload
+        window.addEventListener('beforeunload', function() {
+            releaseMediaResources();
+        });
+        
+        // Release media resources immediately when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            releaseMediaResources();
+        });
+        
+        // Prevent going back
+        window.history.pushState(null, null, window.location.href);
+        window.onpopstate = function() {
+            window.history.pushState(null, null, window.location.href);
+        };
+        
+        // Add keyboard shortcut (Ctrl+W or Cmd+W)
+        document.addEventListener('keydown', function(e) {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'w') {
+                e.preventDefault();
+                closeInterview();
+            }
+        });
+    </script>
+    
+</body>
+</html>
+

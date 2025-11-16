@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset='utf-8'>
+<meta name='viewport' content='width=device-width,initial-scale=1'>
+<title>AI Interview Bot</title>
+<style>
+body{font-family:'Segoe UI',Tahoma,Arial;margin:0;padding:16px;background:#f5f5f5;} 
+.container{background:#fff;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.08);padding:20px;max-width:800px;margin:0 auto;}
+.status{padding:15px;border-radius:8px;background:#e7f3ff;color:#0c5460;margin:15px 0;text-align:center;font-weight:600;}
+.question{font-size:18px;font-weight:600;margin:20px 0;padding:15px;background:#f8f9fa;border-radius:8px;border-left:4px solid #007bff;}
+.transcript{background:#f8f9fa;padding:15px;border-radius:8px;margin:15px 0;border-left:3px solid #28a745;min-height:60px;}
+.progress{width:100%;height:20px;background:#e9ecef;border-radius:10px;overflow:hidden;margin:15px 0;}
+.progress-fill{height:100%;background:#007bff;transition:width 0.3s ease;}
+.mic-status{display:inline-block;width:20px;height:20px;border-radius:50%;margin-right:10px;background:#dc3545;animation:pulse 1s infinite;}
+.mic-status.idle{background:#6c757d;animation:none;}
+@keyframes pulse{0%{opacity:1;}50%{opacity:0.7;}100%{opacity:1;}}
+audio{width:100%;margin:10px 0;}
+</style>
+</head>
+<body>
+<div class='container'>
+  <h2 style='text-align:center;color:#333;margin-bottom:20px;'>🎤 AI Technical Interview</h2>
+  <div class='progress'><div class='progress-fill' id='progressFill' style='width:0%'></div></div>
+  <div style='text-align:center;margin-bottom:20px;'><span id='progressText'>Question 1 of 4</span></div>
+  <div class='status' id='st'>Initializing interview...</div>
+  <div class='question' id='q'></div>
+  <audio id='qa' controls style='display:none'></audio>
+  <div style='text-align:center;margin:15px 0;'>
+    <div class='mic-status' id='micStatus'></div>
+    <span id='micStatusText'>Preparing...</span>
+  </div>
+  <div class='transcript' id='live'><strong>Live transcription:</strong> <span style='color:#999;'>Listening for speech...</span></div>
+</div>
+
+<script>
+const SESSION_KEY="{{ session_key }}";
+const DEEPGRAM_API_KEY='6690abf90d1c62c6b70ed632900b2c093bc06d79';
+
+let sid=null,listening=false,upstreamReady=false,isFinalizing=false;
+let ws=null,ctx=null,node=null,source=null,streamRef=null;
+let stable='',partial='',hadTranscript=false;
+let recordingStartMs=0,lastTranscriptMs=0;
+const INITIAL_SILENCE_MS=4000,SPEECH_INACTIVITY_MS=5000;
+
+function getProxyWsUrl(){
+  const loc=window.location;
+  const wsProto=loc.protocol==='https:'?'wss':'ws';
+  return wsProto+'://'+loc.host+'/dg_ws';
+}
+
+async function api(url,body){
+  const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  return await r.json();
+}
+
+async function start(){
+  console.log('🚀 Starting chatbot...');
+  document.getElementById('st').innerText='Starting...';
+  const data=await api('/ai/start',{session_key:SESSION_KEY});
+  console.log('✅ Response from /ai/start:',data);
+  console.log('🎵 Audio URL:', data.audio_url);
+  console.log('❓ Question:', data.question);
+  console.log('📊 Question number:', data.question_number);
+  if(data.error){
+    document.getElementById('st').innerText='Error: '+data.error;
+    return;
+  }
+  sid=data.session_id;
+  document.getElementById('q').innerText=data.question||'';
+  document.getElementById('st').innerText='Question asked. Speak your answer...';
+  document.getElementById('progressText').innerText='Question '+data.question_number+' of '+data.max_questions;
+  document.getElementById('progressFill').style.width=((data.question_number/data.max_questions)*100)+'%';
+  
+  if(data.audio_url && data.audio_url.trim()){
+    const qa=document.getElementById('qa');
+    qa.style.display='block';
+    qa.src=data.audio_url;
+    qa.onended=()=>beginRecord();
+    qa.play().catch(()=>beginRecord());
+  }else{
+    // Wait for Google Cloud TTS audio - if not available, wait a bit then start recording
+    console.warn('⚠️ No audio_url provided - Google Cloud TTS may not be configured');
+    setTimeout(beginRecord,600);
+  }
+}
+
+async function beginRecord(){
+  if(listening)return;
+  listening=true;
+  document.getElementById('st').innerText='🎤 Listening...';
+  hadTranscript=false;
+  stable='';
+  partial='';
+  
+  // Reuse existing stream and context if available
+  if(!streamRef || !streamRef.active){
+    try{
+      console.log('🎤 Requesting microphone access...');
+      streamRef=await navigator.mediaDevices.getUserMedia({
+        audio:{
+          echoCancellation:false,
+          noiseSuppression:false,
+          autoGainControl:false,
+          sampleRate:16000,
+          channelCount:2
+        }
+      });
+      console.log('✅ Microphone access granted');
+      console.log('🎤 Audio track settings:', streamRef.getAudioTracks()[0].getSettings());
+    }catch(e){
+      console.error('❌ Microphone error:', e);
+      document.getElementById('st').innerText='Mic error: '+e.message;
+      return;
+    }
+  }else{
+    console.log('♻️ Reusing existing microphone stream');
+  }
+  
+  // Reuse existing audio context if available
+  if(!ctx || ctx.state==='closed'){
+    console.log('🎙️ Creating new audio context...');
+    ctx=new (window.AudioContext||window.webkitAudioContext)();
+    console.log('🎙️ Audio context native SR:',ctx.sampleRate);
+    console.log('🎙️ Audio context state:',ctx.state);
+  }else{
+    console.log('♻️ Reusing existing audio context, state:', ctx.state);
+  }
+  
+  // Resume audio context if suspended
+  if(ctx.state==='suspended'){
+    await ctx.resume();
+    console.log('✅ Audio context resumed');
+  }
+  
+  // CRITICAL: Only create source ONCE! Creating multiple sources from same stream breaks ScriptProcessor
+  if(!source){
+    source=ctx.createMediaStreamSource(streamRef);
+    console.log('✅ Media stream source created');
+  }else{
+    console.log('♻️ Reusing existing media stream source');
+  }
+  
+  // Use ScriptProcessor instead of AudioWorklet for better compatibility
+  const USE_SCRIPT_PROCESSOR = true;
+  
+  async function setupWorklet(){
+    console.log('🔧 Setting up audio worklet...');
+    const code=`class PCMWorkletProcessor extends AudioWorkletProcessor{
+      process(inputs){
+        // Handle both mono and stereo by reading all available channels
+        if(inputs&&inputs[0]){
+          const channels=inputs[0];
+          if(channels.length===0)return true;
+          
+          // If stereo, mix down to mono
+          if(channels.length===2){
+            const left=channels[0];
+            const right=channels[1];
+            const mono=new Float32Array(left.length);
+            for(let i=0;i<left.length;i++){
+              mono[i]=(left[i]+right[i])/2;
+            }
+            this.port.postMessage(mono);
+          }else{
+            // Mono input
+            this.port.postMessage(channels[0]);
+          }
+        }
+        return true;
+      }
+    }
+    registerProcessor('pcm-worklet',PCMWorkletProcessor);`;
+    const blob=new Blob([code],{type:'application/javascript'});
+    const url=URL.createObjectURL(blob);
+    await ctx.audioWorklet.addModule(url);
+    URL.revokeObjectURL(url);
+    console.log('✅ Audio worklet module loaded');
+    
+    node=new AudioWorkletNode(ctx,'pcm-worklet',{numberOfInputs:1,numberOfOutputs:1,outputChannelCount:[1]});
+    console.log('✅ Audio worklet node created');
+    
+    let packetCount = 0;
+    node.port.onmessage=(ev)=>{
+      packetCount++;
+      if(packetCount % 50 === 1) {  // Log every 50th packet to reduce spam
+        console.log('🎵 Audio worklet message received:', ev.data.length, 'samples, packet#', packetCount);
+      }
+      if(!ws||ws.readyState!==WebSocket.OPEN||!upstreamReady){
+        if(packetCount % 50 === 1) {
+          console.log('⚠️ WebSocket not ready - ws:', ws?.readyState, 'upstreamReady:', upstreamReady);
+        }
+        return;
+      }
+      const f32=ev.data;
+      const i16=new Int16Array(f32.length);
+      for(let i=0;i<f32.length;i++){
+        let s=f32[i];
+        s=Math.max(-1,Math.min(1,s));
+        i16[i]=s<0?s*0x8000:s*0x7FFF;
+      }
+      // Calculate RMS to detect actual audio
+      const rms = Math.sqrt(f32.reduce((sum, val) => sum + val * val, 0) / f32.length);
+      if (rms > 0.001) { // Lower threshold to catch more audio
+        console.log('🎵 Audio packet with sound detected!', { rms: rms.toFixed(4), samples: f32.length, bufferSize: i16.buffer.byteLength });
+      }
+      ws.send(i16.buffer);
+    };
+    const silent=ctx.createGain();
+    silent.gain.value=0;
+    source.connect(node);
+    node.connect(silent).connect(ctx.destination);
+    console.log('✅ Audio worklet connected to audio graph');
+  }
+  
+  function setupScriptProcessor(){
+    console.log('🔧 Setting up ScriptProcessor...');
+    // Use buffer size 4096, match input channels with stream
+    node=ctx.createScriptProcessor(4096,2,1);
+    let packetCount = 0;
+    let lastPacketTime = Date.now();
+    node.onaudioprocess=(ev)=>{
+      try{
+        packetCount++;
+        lastPacketTime = Date.now();
+        if(packetCount % 50 === 1) {
+          console.log('🎵 ScriptProcessor packet#', packetCount);
+        }
+        if(!ws||ws.readyState!==WebSocket.OPEN||!upstreamReady){
+          if(packetCount % 50 === 1) {
+            console.log('⚠️ WebSocket not ready');
+          }
+          return;
+        }
+        
+        // Mix stereo to mono
+        const left=ev.inputBuffer.getChannelData(0);
+        const right=ev.inputBuffer.numberOfChannels > 1 ? ev.inputBuffer.getChannelData(1) : left;
+        const mono=new Float32Array(left.length);
+        for(let i=0;i<left.length;i++){
+          mono[i]=(left[i]+right[i])/2;
+        }
+        
+        // Calculate RMS
+        const rms = Math.sqrt(mono.reduce((sum, val) => sum + val * val, 0) / mono.length);
+        if (rms > 0.001) {
+          console.log('🎵 Audio with sound detected!', { rms: rms.toFixed(4), samples: mono.length });
+        }
+        
+        // Convert to INT16
+        const i16=new Int16Array(mono.length);
+        for(let i=0;i<mono.length;i++){
+          let s=Math.max(-1,Math.min(1,mono[i]));
+          i16[i]=s<0?s*0x8000:s*0x7FFF;
+        }
+        ws.send(i16.buffer);
+      }catch(err){
+        console.error('❌ ScriptProcessor error:', err);
+      }
+    };
+    source.connect(node);
+    node.connect(ctx.destination);
+    console.log('✅ ScriptProcessor connected to audio graph');
+    
+    // Keep a reference to prevent garbage collection
+    window._activeAudioNode = node;
+    window._activeAudioSource = source;
+    window._activeAudioContext = ctx;
+    
+    // Monitor if callbacks stop
+    const monitor = setInterval(() => {
+      const now = Date.now();
+      if (now - lastPacketTime > 500 && listening) {
+        console.warn('⚠️ ScriptProcessor callbacks stopped! Last packet:', packetCount);
+        console.log('📊 Audio context state:', ctx.state);
+        console.log('📊 Node connected:', node.numberOfInputs, 'inputs,', node.numberOfOutputs, 'outputs');
+        console.log('📊 Stream active:', streamRef.active, 'tracks:', streamRef.getTracks().map(t => t.readyState));
+      }
+    }, 1000);
+    
+    // Store monitor for cleanup
+    window._audioMonitor = monitor;
+  }
+  
+  // Always use ScriptProcessor for better audio capture
+  if(USE_SCRIPT_PROCESSOR){
+    console.log('📊 Using ScriptProcessor (forced for compatibility)');
+    setupScriptProcessor();
+  }else if(ctx.audioWorklet){
+    try{
+      await setupWorklet();
+    }catch(_e){
+      console.warn('AudioWorklet failed, using ScriptProcessor');
+      setupScriptProcessor();
+    }
+  }else{
+    setupScriptProcessor();
+  }
+  
+  initWS(ctx.sampleRate||48000);
+  recordingStartMs=Date.now();
+  lastTranscriptMs=recordingStartMs;
+  tickInactive();
+}
+
+function initWS(sampleRate){
+  const url=getProxyWsUrl();
+  console.log('🔐 Connecting to Deepgram proxy...');
+  ws=new WebSocket(url);
+  ws.binaryType='arraybuffer';
+  ws.onopen=()=>{
+    console.log('✅ Proxy connected, sending config for SR:',sampleRate);
+    // Send config first to proxy
+    ws.send(JSON.stringify({
+      sample_rate:Number(sampleRate)||16000,
+      model:'general'  // Changed from 'nova-2-meeting' - requires paid Deepgram tier
+    }));
+    upstreamReady=true;
+  };
+  ws.onmessage=(ev)=>{
+    try{
+      const data=JSON.parse(ev.data);
+      console.log('🔊 Deepgram response:', data); // Debug all responses
+      if(data.type==='Results'&&data.channel&&data.channel.alternatives&&data.channel.alternatives[0]){
+        const t=data.channel.alternatives[0].transcript||'';
+        const isFinal=!!data.is_final;
+        console.log('📝 Transcript:',[t],'final:',isFinal);
+        if(isFinal){
+          if(t.trim()){
+            stable+=t+' ';
+            hadTranscript=true;
+            lastTranscriptMs=Date.now();
+          }
+          partial='';
+        }else{
+          partial=t;
+          if(t.trim()){
+            hadTranscript=true;
+            lastTranscriptMs=Date.now();
+          }
+        }
+        updateLive();
+      }
+    }catch(err){
+      console.error('❌ Error parsing Deepgram message:', err, ev.data);
+    }
+  };
+  ws.onclose=(ev)=>{
+    console.log('❌ WebSocket closed:', ev.code, ev.reason);
+    upstreamReady=false;
+  };
+  ws.onerror=(ev)=>{
+    console.error('❌ WebSocket error:', ev);
+  };
+}
+
+function stopRecord(){
+  listening=false;
+  console.log('⏹️ Stopping record...');
+  try{if(node){node.disconnect();node=null;}}catch(e){console.error('Error disconnecting node:', e);}
+  // DON'T close audio context or stop stream - keep them for retry!
+  // try{if(ctx&&ctx.state!=='closed'){ctx.close();}}catch(e){}
+  // try{if(streamRef){streamRef.getTracks().forEach(t=>t.stop());}}catch(e){}
+  try{if(ws){ws.close();}}catch(e){console.error('Error closing WebSocket:', e);}
+  upstreamReady=false;
+  console.log('✅ Record stopped (keeping audio context and stream alive)');
+}
+
+function updateLive(){
+  const combined=(stable+(partial?(' '+partial):'')).trim();
+  document.getElementById('live').innerHTML='<strong>Live transcription:</strong> '+(combined||'<span style="color:#999">Listening...</span>');
+}
+
+function tickInactive(){
+  if(!listening||isFinalizing)return;
+  const now=Date.now();
+  const noSpeech=!hadTranscript;
+  const compare=noSpeech?recordingStartMs:lastTranscriptMs;
+  const th=noSpeech?INITIAL_SILENCE_MS:SPEECH_INACTIVITY_MS;
+  if(now-compare>=th){finalize();return;}
+  setTimeout(tickInactive,500);
+}
+
+async function finalize(){
+  if(isFinalizing)return;
+  isFinalizing=true;
+  stopRecord();
+  const finalText=(stable+(partial?(' '+partial):'')).trim();
+  console.log('🎬 Finalizing:',finalText);
+  try{
+    const data=await api('/ai/upload_answer',{
+      session_id:sid,
+      transcript:finalText||'',
+      silence:finalText?0:1,
+      had_voice:hadTranscript?1:0
+    });
+    console.log('📥 Response:',data);
+    if(data.error){
+      document.getElementById('st').innerText='Error: '+data.error;
+      isFinalizing=false;
+      return;
+    }
+    if(data.completed){
+      document.getElementById('st').innerText=data.message||'Completed';
+      if(window.parent&&window.parent.postMessage){
+        window.parent.postMessage({type:'qa_completed'},'*');
+      }
+      return;
+    }
+    if(data.acknowledge){
+      document.getElementById('st').innerText=data.message||"I didn't catch that.";
+      stable='';
+      partial='';
+      hadTranscript=false;
+      updateLive();
+      isFinalizing=false;
+      setTimeout(beginRecord,800);
+      return;
+    }
+    // Next question
+    document.getElementById('q').innerText=data.next_question||'';
+    document.getElementById('st').innerText='Question asked. Speak your answer...';
+    document.getElementById('progressText').innerText='Question '+data.question_number+' of '+data.max_questions;
+    document.getElementById('progressFill').style.width=((data.question_number/data.max_questions)*100)+'%';
+    stable='';
+    partial='';
+    hadTranscript=false;
+    updateLive();
+    
+    if(data.audio_url && data.audio_url.trim()){
+      const qa=document.getElementById('qa');
+      qa.style.display='block';
+      qa.src=data.audio_url;
+      qa.onended=()=>{isFinalizing=false;beginRecord();};
+      try{
+        await qa.play();
+      }catch(_e){
+        isFinalizing=false;
+        beginRecord();
+      }
+    }else{
+      // Wait for Google Cloud TTS audio - if not available, wait a bit then start recording
+      console.warn('⚠️ No audio_url provided - Google Cloud TTS may not be configured');
+      isFinalizing=false;
+      setTimeout(beginRecord,600);
+    }
+  }catch(e){
+    console.error('Finalize error:',e);
+    document.getElementById('st').innerText='Error: '+e.message;
+    isFinalizing=false;
+  }
+}
+
+// Auto-start
+setTimeout(()=>{
+  console.log('🚀 Auto-starting interview...');
+  start();
+},500);
+</script>
+</body>
+</html>

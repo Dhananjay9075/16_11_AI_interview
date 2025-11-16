@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Advanced Interview Report</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <!-- Add highlight.js for code syntax highlighting -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <style>
+        body { font-family: system-ui, sans-serif; line-height: 1.6; margin: 2em; background-color: #f8f9fa; color: #333; }
+        .container { max-width: 1800px; margin: auto; }
+        .grid-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 1.5em; margin-top: 1.5em; }
+        .card { background-color: #fff; border-radius: 12px; padding: 1.5em; box-shadow: 0 6px 20px rgba(0,0,0,0.08); }
+        .card-full { grid-column: 1 / -1; }
+        h1, h2, h3, h4, h5 { color: #343a40; border-bottom: 2px solid #f0f2f5; padding-bottom: 0.3em; margin-top: 0; }
+        h1 { text-align: center; border: none; }
+        h2 { margin-top: 1.5em; }
+        h3 { font-size: 1.2em; }
+        h4 { font-size: 1.1em; border: none; }
+        h5 { font-size: 1em; color: #007bff; border: none; }
+        .btn { display: inline-block; padding: 0.8em 1.5em; border-radius: 5px; text-decoration: none; }
+        pre { white-space: pre-wrap; font-size: 1em; background-color: #f8f9fa; padding: 1em; border-radius: 6px; }
+        pre code.hljs { padding: 1em; border-radius: 6px; } /* Style for highlighted code */
+        
+        .question-block { margin-bottom: 2.5em; }
+        .main-question { border-left: 4px solid #007bff; padding-left: 1em; }
+        .follow-up-question { border-left: 4px solid #6c757d; padding-left: 1.5em; margin-left: 2em; margin-top: 1.5em; background-color: #f8f9fa; border-radius: 8px; padding: 1em; }
+        .answer { font-style: italic; color: #555; }
+
+        .metric-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1em; margin-top: 1em; }
+        .metric-card { text-align: center; }
+        .metric-value { font-size: 1.5em; font-weight: bold; color: #007bff; }
+        .metric-label { font-size: 0.9em; color: #6c757d; }
+        .overall-score-card { text-align: center; }
+        .overall-score-value { font-size: 4em; font-weight: bold; color: #007bff; }
+        .overall-score-label { font-size: 1.2em; color: #6c757d; }
+        .evaluation-pending-message, .analytics-unavailable { text-align: center; padding: 2em; color: #6c757d; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Advanced Interview Report for {{ session.candidate_name }}</h1>
+    <p style="text-align: center;"><strong>Session ID:</strong> {{ session.id }} | <strong>Date:</strong> {{ session.created_at }}</p>
+    <p style="text-align: center;">
+        <a href="{% url 'download_report_pdf' session.id %}" class="btn" style="background-color: #17a2b8; color: white; margin-right: 8px;">
+            Download AI Evaluation PDF
+        </a>
+        <a href="{% url 'download_proctoring_pdf' session.id %}" class="btn" style="background-color: #6c757d; color: white;">
+            Download Proctoring Report PDF
+        </a>
+    </p>
+
+    {% if session.language_code == 'en' %}
+        <div class="card card-full">
+            <h2>Overall Candidate Profile</h2>
+            {% if session.is_evaluated %}
+                <div class="grid-container" style="grid-template-columns: 1fr 2fr; align-items: center;">
+                    <div class="overall-score-card">
+                        <div class="overall-score-value">{{ session.overall_performance_score|default:"N/A" }}</div>
+                        <div class="overall-score-label">Overall Score</div>
+                    </div>
+                    <div>
+                        <h3>Hiring Recommendation</h3>
+                        <pre>{{ session.overall_performance_feedback }}</pre>
+                    </div>
+                </div>
+            {% else %}
+                <p id="evaluation-pending-message" class="evaluation-pending-message">The AI evaluation is being generated. This page will automatically refresh in 5 seconds...</p>
+            {% endif %}
+        </div>
+
+        {% if session.is_evaluated %}
+            <div class="card card-full">
+                <h2>AI Evaluation Details</h2>
+                <div class="grid-container">
+                    <div>
+                        <h3>Resume vs. Job Description</h3>
+                        <pre>{{ session.resume_feedback }}</pre>
+                    </div>
+                    <div>
+                        <h3>Interview Performance</h3>
+                        <pre>{{ session.answers_feedback }}</pre>
+                    </div>
+                    <div>
+                        <h3>Evaluation Scores</h3>
+                        <canvas id="evaluationChart"></canvas>
+                    </div>
+                    <div>
+                        <h3>AI Keyword Match</h3>
+                        <canvas id="keywordChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid-container">
+                <div class="card">
+                    <h2>Communication Skills Profile</h2>
+                    <canvas id="communicationRadarChart"></canvas>
+                </div>
+                <div class="card">
+                    <h2>Proctoring Warnings</h2>
+                    <canvas id="warningsPieChart"></canvas>
+                    <p id="no-warnings-msg" style="display: none; text-align: center;">No warnings were logged.</p>
+                </div>
+                <div class="card">
+                    <h2>Sentiment Trend</h2>
+                    <canvas id="sentimentTrendChart"></canvas>
+                </div>
+            </div>
+        {% endif %}
+    {% else %}
+        <div class="card analytics-unavailable">
+            <h2>Advanced Analytics Not Available</h2>
+            <p>Advanced AI evaluation and communication metrics are only supported for interviews conducted in English.</p>
+        </div>
+    {% endif %}
+    
+    <div class="card card-full">
+        <h2>Questions & Transcripts</h2>
+        {% for main_question in main_questions_with_followups %}
+            {% if main_question.question_type != 'CODING' %}
+                <div class="question-block">
+                    <div class="main-question">
+                        <h4>Q{{ main_question.order|add:1 }}: {{ main_question.question_text }}</h4>
+                        <p class="answer"><strong>Answer:</strong> {{ main_question.transcribed_answer|default:"No answer recorded."|linebreaksbr }}</p>
+                    </div>
+
+                    {% for follow_up in main_question.follow_ups.all %}
+                        <div class="follow-up-question">
+                            <h5>Follow-Up: {{ follow_up.question_text }}</h5>
+                            <p class="answer"><strong>Answer:</strong> {{ follow_up.transcribed_answer|default:"No answer recorded."|linebreaksbr }}</p>
+                        </div>
+                    {% endfor %}
+                    
+                    {% if session.language_code == 'en' %}
+                    <div class="metric-grid">
+                        <div class="metric-card">
+                            <div class="metric-value">{{ main_question.words_per_minute|default:"N/A" }}</div>
+                            <div class="metric-label">Pace (WPM)</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">{{ main_question.filler_word_count|default:"N/A" }}</div>
+                            <div class="metric-label">Filler Words</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">{{ main_question.response_time_seconds|floatformat:1|default:"N/A" }}s</div>
+                            <div class="metric-label">Response Time</div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            {% endif %}
+        {% empty %}
+            <p>No spoken questions were found for this session.</p>
+        {% endfor %}
+    </div>
+
+    {% if code_submissions %}
+    <div class="card card-full">
+        <h2>Coding Challenge Submission(s)</h2>
+        {% for submission in code_submissions %}
+            <div class="question-block">
+                <div class="main-question">
+                    <h4>Challenge: {{ submission.question.question_text }}</h4>
+                    <p class="answer"><strong>Language:</strong> {{ submission.language }}</p>
+                    <p class="answer"><strong>Submitted Code:</strong></p>
+                    <pre><code class="{{ submission.language|lower }}">{{ submission.submitted_code|default:"No code was submitted." }}</code></pre>
+                    
+                    <p class="answer" style="margin-top:1em;"><strong>Test Results & Output:</strong></p>
+                    <pre>{{ submission.output_log|default:"Test results were not recorded." }}</pre>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+</div>
+
+{{ analytics_data|json_script:"analytics-data" }}
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        hljs.highlightAll();
+        
+        const evalPendingMsg = document.getElementById('evaluation-pending-message');
+        if (evalPendingMsg) {
+            setTimeout(() => { window.location.reload(); }, 5000);
+        }
+
+        try {
+            const analyticsData = JSON.parse(document.getElementById('analytics-data').textContent);
+
+            const evalCtx = document.getElementById('evaluationChart')?.getContext('2d');
+            if(evalCtx && analyticsData.evaluation_scores) {
+                new Chart(evalCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: Object.keys(analyticsData.evaluation_scores),
+                        datasets: [{
+                            label: 'Score (out of 10)',
+                            data: Object.values(analyticsData.evaluation_scores),
+                            backgroundColor: ['rgba(54, 162, 235, 0.6)', 'rgba(255, 99, 132, 0.6)'],
+                            borderColor: ['rgba(54, 162, 235, 1)', 'rgba(255, 99, 132, 1)'],
+                            borderWidth: 1
+                        }]
+                    },
+                    options: { indexAxis: 'y', responsive: true, scales: { x: { beginAtZero: true, max: 10 } }, plugins: { legend: { display: false } } }
+                });
+            }
+
+            const warningsPieCtx = document.getElementById('warningsPieChart');
+            if (warningsPieCtx && analyticsData.warning_counts && Object.keys(analyticsData.warning_counts).length > 0) {
+                const doughnutLabel = {
+                    id: 'doughnutLabel',
+                    afterDraw(chart, args, options) {
+                        const { ctx, data } = chart;
+                        const total = data.datasets[0].data.reduce((a, b) => a + b, 0);
+                        if (total === 0) return;
+                        ctx.save();
+                        const x = chart.getDatasetMeta(0).data[0].x;
+                        const y = chart.getDatasetMeta(0).data[0].y;
+                        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                        ctx.font = 'bold 40px sans-serif'; ctx.fillStyle = '#343a40';
+                        ctx.fillText(total, x, y - 10);
+                        ctx.font = '16px sans-serif'; ctx.fillStyle = '#6c757d';
+                        ctx.fillText('Warnings', x, y + 20);
+                        ctx.restore();
+                    }
+                };
+                new Chart(warningsPieCtx.getContext('2d'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: Object.keys(analyticsData.warning_counts),
+                        datasets: [{ data: Object.values(analyticsData.warning_counts), backgroundColor: ['#ef476f', '#ffd166', '#06d6a0', '#118ab2', '#073b4c'], hoverOffset: 4 }]
+                    },
+                    options: { responsive: true, plugins: { legend: { position: 'top' } }, cutout: '60%' },
+                    plugins: [doughnutLabel]
+                });
+            } else if (warningsPieCtx) {
+                document.getElementById('no-warnings-msg').style.display = 'block';
+                warningsPieCtx.style.display = 'none';
+            }
+
+            const sentimentTrendCtx = document.getElementById('sentimentTrendChart')?.getContext('2d');
+            if (sentimentTrendCtx && analyticsData.sentiment_scores && analyticsData.sentiment_scores.length > 0) {
+                new Chart(sentimentTrendCtx, {
+                    type: 'line',
+                    data: {
+                        labels: analyticsData.sentiment_scores.map(s => s.question),
+                        datasets: [{ label: 'Sentiment Trend', data: analyticsData.sentiment_scores.map(s => s.score), borderColor: 'rgba(75, 192, 192, 1)', tension: 0.2 }]
+                    },
+                    options: { scales: { y: { min: -1, max: 1 } }, plugins: { legend: { display: false } } }
+                });
+            }
+
+            const radarCtx = document.getElementById('communicationRadarChart')?.getContext('2d');
+            if (radarCtx && analyticsData.communication_radar) {
+                const commData = analyticsData.communication_radar;
+                const paceScore = Math.min(10, (commData['Pace (WPM)'] / 150) * 10);
+                const clarityScore = Math.max(0, 10 - (commData['Clarity (Few Fillers)'] * 2));
+                const responseScore = Math.max(0, 10 - (commData['Responsiveness (sec)']));
+                new Chart(radarCtx, {
+                    type: 'radar',
+                    data: {
+                        labels: ['Pace', 'Clarity', 'Responsiveness'],
+                        datasets: [{ label: 'Communication Score (out of 10)', data: [paceScore, clarityScore, responseScore], backgroundColor: 'rgba(54, 162, 235, 0.2)', borderColor: 'rgba(54, 162, 235, 1)', borderWidth: 1 }]
+                    },
+                    options: { scales: { r: { beginAtZero: true, max: 10 } } }
+                });
+            }
+            
+            const keywordCtx = document.getElementById('keywordChart')?.getContext('2d');
+            if (keywordCtx && analyticsData.keyword_chart && analyticsData.keyword_chart.length > 0) {
+                new Chart(keywordCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: analyticsData.keyword_chart.map(k => k.skill),
+                        datasets: [{ label: 'Skill Demonstration (out of 10)', data: analyticsData.keyword_chart.map(k => k.score), backgroundColor: analyticsData.keyword_chart.map(k => k.score === 10 ? 'rgba(40, 167, 69, 0.6)' : k.score === 5 ? 'rgba(255, 193, 7, 0.6)' : 'rgba(220, 53, 69, 0.6)') }]
+                    },
+                    options: { indexAxis: 'y', scales: { x: { beginAtZero: true, max: 10 } }, plugins: { legend: { display: false } } }
+                });
+            }
+        } catch(e) {
+            console.error("Error parsing or rendering analytics data:", e);
+        }
+    });
+</script>
+</body>
+</html>
